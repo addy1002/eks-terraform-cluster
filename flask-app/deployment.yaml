@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addy-flask-app
+  labels:
+    app: addy-flask-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addy-flask-app
+  template:
+    metadata:
+      labels:
+        app: addy-flask-app
+    spec:
+      containers:
+        - name: addy-flask-app
+          image: <YOUR_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/addy-flask-app:latest
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addy-flask-app-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: addy-flask-app
+  ports:
+    - port: 80
+      targetPort: 5000
