@@ -108,3 +108,16 @@ This tells Terraform to stop tracking `desired_size` as a managed attribute afte
 ## Tech stack
 
 Terraform · AWS (VPC, EKS, IAM, ECR, EC2) · Kubernetes · Docker · Flask
+## Troubleshooting story: orphaned load balancer blocking `terraform destroy`
+
+**Problem:** After deploying the Flask app with a Kubernetes `Service` of `type: LoadBalancer`, AWS provisioned a Classic Load Balancer and an associated security group (`k8s-elb-...`) automatically — outside of Terraform's knowledge, since these were created by the AWS cloud-controller-manager reacting to the Kubernetes Service object, not by a Terraform resource.
+
+When running `terraform destroy`, the subnets and Internet Gateway got stuck in a "Still destroying..." loop for over 15 minutes. The root cause: the orphaned ELB's network interfaces were still attached to the subnets, and its security group was still referencing the VPC — both invisible to Terraform's dependency graph.
+
+**Fix:**
+1. Identify the leftover load balancer: `aws elb describe-load-balancers`
+2. Delete it: `aws elb delete-load-balancer --load-balancer-name <name>`
+3. Delete the orphaned security group it created: `aws ec2 delete-security-group --group-id <id>`
+4. `terraform destroy` automatically resumed and completed within 2–3 minutes — no restart needed, since Terraform retries in the background.
+
+**Takeaway:** Any Kubernetes resource that provisions cloud infrastructure directly (LoadBalancer Services, EBS-backed PersistentVolumes, etc.) creates resources Terraform doesn't track. Always delete Kubernetes-managed cloud resources (`kubectl delete service <name>`, or drain the workload) **before** running `terraform destroy` on the underlying cluster — otherwise you'll hit this exact dependency deadlock.
